@@ -7,6 +7,7 @@ use crate::transcript::{RunningEvaluationVar, TranscriptEntryVar};
 /// A trait for getting and setting portal wires in partitioned circuits
 pub trait PortalManager<F: PrimeField> {
     /// Gets the portal wire of the given name. Panics if no such wire exists.
+    /// 获取给定名称的 portal wire，如果不存在则 panic。
     fn get(&mut self, name: &str) -> Result<FpVar<F>, SynthesisError>;
 
     fn set(&mut self, name: String, val: &FpVar<F>) -> Result<(), SynthesisError>;

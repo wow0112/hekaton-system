@@ -1,13 +1,10 @@
 use std::{
-    io,
-    // fs::File,
-    // io::{self, Read, Write},
-    // os,
-    path::PathBuf,
+    fs::File, io::{self, Read, Write}, os, path::PathBuf
 };
 
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::{end_timer, start_timer};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
@@ -20,6 +17,7 @@ pub use ark_cp_groth16::{
     r1cs_to_qap::LibsnarkReduction as QAP,
 };
 pub use merlin::Transcript as ProtoTranscript;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 /// A seed used for the RNG in stage 0 commitments. Each worker saves this and redoes the
 /// commitment once it's asked to do stage 1
@@ -93,29 +91,29 @@ pub mod cli_filenames {
 /// Serializes the given value to "DIR/FILENAMEPREFIX_INDEX". The "_INDEX" part is ommitted if no
 /// index is given.
 pub fn serialize_to_path<T: CanonicalSerialize>(
-    _val: &T,
-    _dir: &PathBuf,
-    _filename_prefix: &str,
-    _index: Option<usize>,
+    val: &T,
+    dir: &PathBuf,
+    filename_prefix: &str,
+    index: Option<usize>,
 ) -> io::Result<()> {
-    // let idx_str = if let Some(i) = index {
-    //     format!("_{i}")
-    // } else {
-    //     "".to_string()
-    // };
-    // let filename = format!("{}{}.bin", filename_prefix, idx_str);
+    let idx_str = if let Some(i) = index {
+        format!("_{i}")
+    } else {
+        "".to_string()
+    };
+    let filename = format!("{}{}.bin", filename_prefix, idx_str);
 
-    // let file_path = dir.join(filename);
+    let file_path = dir.join(filename);
 
-    // let start0 = start_timer!(|| "Serializing value");
-    // let mut buf = Vec::new();
-    // val.serialize_uncompressed(&mut buf).unwrap();
-    // end_timer!(start0);
+    let start0 = start_timer!(|| "Serializing value");
+    let mut buf = Vec::new();
+    val.serialize_uncompressed(&mut buf).unwrap();
+    end_timer!(start0);
 
-    // let start1 = start_timer!(|| format!("Writing to file {:?}", file_path));
-    // let mut f = File::create(file_path)?;
-    // f.write_all(&buf)?;
-    // end_timer!(start1);
+    let start1 = start_timer!(|| format!("Writing to file {:?}", file_path));
+    let mut f = File::create(file_path)?;
+    f.write_all(&buf)?;
+    end_timer!(start1);
 
     Ok(())
 }
@@ -123,40 +121,40 @@ pub fn serialize_to_path<T: CanonicalSerialize>(
 /// Serializes the given value to "DIR/FILENAMEPREFIX_INDEX1", "DIR/FILENAMEPREFIX_INDEX2", etc..
 /// The "_INDEX" part is ommitted if no index is given.
 pub fn serialize_to_paths<T: CanonicalSerialize>(
-    _val: &T,
-    _dir: &PathBuf,
-    _filename_prefix: &str,
-    _indices: core::ops::Range<usize>,
+    val: &T,
+    dir: &PathBuf,
+    filename_prefix: &str,
+    indices: core::ops::Range<usize>,
 ) -> io::Result<()> {
-    // let start0 = start_timer!(|| "Serializing value");
-    // let mut buf = Vec::new();
-    // val.serialize_uncompressed(&mut buf).unwrap();
-    // end_timer!(start0);
+    let start0 = start_timer!(|| "Serializing value");
+    let mut buf = Vec::new();
+    val.serialize_uncompressed(&mut buf).unwrap();
+    end_timer!(start0);
 
-    // // Write the first file for real
-    // let first_file_path = {
-    //     let first_idx = indices.start;
-    //     let filename = format!("{filename_prefix}_{first_idx}.bin");
-    //     dir.join(filename)
-    // };
-    // let start1 = start_timer!(|| format!("Writing to file {:?}", first_file_path));
-    // let mut f = File::create(&first_file_path)?;
-    // f.write_all(&buf)?;
-    // end_timer!(start1);
+    // Write the first file for real
+    let first_file_path = {
+        let first_idx = indices.start;
+        let filename = format!("{filename_prefix}_{first_idx}.bin");
+        dir.join(filename)
+    };
+    let start1 = start_timer!(|| format!("Writing to file {:?}", first_file_path));
+    let mut f = File::create(&first_file_path)?;
+    f.write_all(&buf)?;
+    end_timer!(start1);
 
-    // // For all the remaining files, just make symlinks to the first file
-    // let start2 = start_timer!(|| format!("Symlinking {} times", indices.len()));
-    // indices
-    //     .into_par_iter()
-    //     .skip(1)
-    //     .map(|i| {
-    //         let filename = format!("{filename_prefix}_{i}.bin");
-    //         let new_file_path = dir.join(filename);
+    // For all the remaining files, just make symlinks to the first file
+    let start2 = start_timer!(|| format!("Symlinking {} times", indices.len()));
+    indices
+        .into_par_iter()
+        .skip(1)
+        .map(|i| {
+            let filename = format!("{filename_prefix}_{i}.bin");
+            let new_file_path = dir.join(filename);
 
-    //         os::unix::fs::symlink(&first_file_path, &new_file_path)
-    //     })
-    //     .collect::<io::Result<()>>()?;
-    // end_timer!(start2);
+            os::unix::fs::symlink(&first_file_path, &new_file_path)
+        })
+        .collect::<io::Result<()>>()?;
+    end_timer!(start2);
 
     Ok(())
 }
@@ -164,28 +162,28 @@ pub fn serialize_to_paths<T: CanonicalSerialize>(
 /// Deserializes "DIR/FILENAMEPREFIX_INDEX" to the given type. The "_INDEX" part is ommitted if no
 /// index is given.
 pub fn deserialize_from_path<T: CanonicalDeserialize>(
-    _dir: &PathBuf,
-    _filename_prefix: &str,
-    _index: Option<usize>,
+    dir: &PathBuf,
+    filename_prefix: &str,
+    index: Option<usize>,
 ) -> io::Result<T> {
-    // let idx_str = if let Some(i) = index {
-    //     format!("_{i}")
-    // } else {
-    //     "".to_string()
-    // };
-    // let filename = format!("{}{}.bin", filename_prefix, idx_str);
+    let idx_str = if let Some(i) = index {
+        format!("_{i}")
+    } else {
+        "".to_string()
+    };
+    let filename = format!("{}{}.bin", filename_prefix, idx_str);
 
-    // let file_path = dir.join(filename);
-    // let mut buf = Vec::new();
-    // let start0 = start_timer!(|| format!("Reading from file {:?}", file_path));
-    // let mut f = File::open(&file_path).expect(&format!("couldn't open file {:?}", file_path));
-    // let _ = f.read_to_end(&mut buf)?;
-    // end_timer!(start0);
+    let file_path = dir.join(filename);
+    let mut buf = Vec::new();
+    let start0 = start_timer!(|| format!("Reading from file {:?}", file_path));
+    let mut f = File::open(&file_path).expect(&format!("couldn't open file {:?}", file_path));
+    let _ = f.read_to_end(&mut buf)?;
+    end_timer!(start0);
 
-    // let start1 = start_timer!(|| "Deserializing value");
-    // let val = T::deserialize_uncompressed_unchecked(buf.as_slice()).unwrap();
-    // end_timer!(start1);
+    let start1 = start_timer!(|| "Deserializing value");
+    let val = T::deserialize_uncompressed_unchecked(buf.as_slice()).unwrap();
+    end_timer!(start1);
 
-    // Ok(val)
-    todo!()
+    Ok(val)
+
 }

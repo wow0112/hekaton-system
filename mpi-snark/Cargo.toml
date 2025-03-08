@@ -29,7 +29,7 @@ ark-ip-proofs = { git = "https://www.github.com/arkworks-rs/ripp", branch = "ip-
 ark-inner-products = { git = "https://www.github.com/arkworks-rs/ripp", branch = "ip-commitment-old" }
 
 [features]
-default = []#"print-trace"]
+default = []#"print-trace"
 print-trace = ["ark-std/print-trace"]
 all_parallel = [
     "ark-ff/parallel", 

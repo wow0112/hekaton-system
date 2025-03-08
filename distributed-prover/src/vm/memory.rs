@@ -36,7 +36,7 @@ impl<P: PortalManager<Fr>> Memory<'_, P> {
         }
     }
 
-    pub fn set(&mut self, name: String, value: &FpVar<Fr>, cs: ConstraintSystemRef<Fr>) {
+    pub fn  set(&mut self, name: String, value: &FpVar<Fr>, cs: ConstraintSystemRef<Fr>) {
         match self.use_merkle_memory {
             true => {
                 merkle_path_verification(cs.clone());

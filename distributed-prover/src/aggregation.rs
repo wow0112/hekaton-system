@@ -242,6 +242,14 @@ impl<'b, E: Pairing> AggProvingKey<'b, E> {
         }
         // Check each individual equation holds with the r coeffs
         for i in 0..num_proofs {
+            let left  =  E::pairing(&a_r[i], &b_vals[i]);
+            let right =E::pairing(&alpha_r[i], &self.beta[i])
+                + E::pairing(&prepared_input_r[i], &self.h[i])
+                + E::pairing(&d_r[i], &self.delta0[i])
+                + E::pairing(&c_r[i], &self.delta1[i]);        
+            if left != right {
+                println!("$$$$$$$$$num_proofs: {}", i);
+            }
             debug_assert_eq!(
                 E::pairing(&a_r[i], &b_vals[i]),
                 E::pairing(&alpha_r[i], &self.beta[i])
@@ -338,6 +346,7 @@ impl<'b, E: Pairing> AggProvingKey<'b, E> {
 
         let tipp_start = start_timer!(|| format!("Verifying TIPA for {num_proofs} proofs"));
         assert!(TIPA::<_, Sha256>::verify(&self.tipp_pk.vk(), &instance, &tipp_proof).unwrap());
+        println!("verify!!");
         end_timer!(tipp_start);
         end_timer!(start);
 

@@ -38,6 +38,8 @@ impl AddressManager {
     }
 
     // Function to get the address by name or assign a new one
+    /// 根据传进来的字符串名称 name，在 addresses 中查找有没有对应的地址。
+    /// 如果有，就返回对应的地址；如果没有，就给它分配一个新的地址，然后返回这个新地址。
     pub fn name_to_addr(&mut self, name: &str) -> u64 {
         match self.addresses.get(name) {
             Some(&address) => address,
@@ -78,6 +80,7 @@ impl<F: PrimeField> SetupRamPortalManager<F> {
         }
     }
 
+    /// 在 subtraces 向量末尾新插入一个空的子迹向量，意味着“开始一个新的子迹(subtrace)”
     pub fn start_subtrace(&mut self, cs: ConstraintSystemRef<F>) {
         self.subtraces.push(Vec::new());
         self.cs = cs;
@@ -85,6 +88,8 @@ impl<F: PrimeField> SetupRamPortalManager<F> {
 }
 
 impl<F: PrimeField> PortalManager<F> for SetupRamPortalManager<F> {
+    /// 根据name，返回对应的value的 witness
+    /// 将一次读操作（包含地址addr，值val，时间i，以及这是一次读read= true）记录到 subtraces 中最新的子迹里
     fn get(&mut self, name: &str) -> Result<FpVar<F>, SynthesisError> {
         // Get the transcript entry corresponding to this variable
         let value = *self
@@ -106,12 +111,15 @@ impl<F: PrimeField> PortalManager<F> for SetupRamPortalManager<F> {
                 read: true,
             });
 
+        // 递增 time_index
         self.time_index.increment_inplace();
 
         // Return the witnessed value
         Ok(val_var)
     }
 
+    /// 将 ( name, value ) 更新到 var_map 里
+    /// 记录一次写操作（read = false）到 subtraces 中最新的子迹里
     fn set(&mut self, name: String, val: &FpVar<F>) -> Result<(), SynthesisError> {
         // update var_map
         self.var_map.insert(name.clone(), val.value()?);
@@ -134,6 +142,7 @@ impl<F: PrimeField> PortalManager<F> for SetupRamPortalManager<F> {
         Ok(())
     }
 
+    /// 在“设置期”对应的 PortalManager 并不真正维护“多项式累积”(RunningEvaluationVar)
     fn running_evals(&self) -> RunningEvaluationVar<F> {
         // A setup portal manager does not have running evals
         unimplemented!()
@@ -148,8 +157,10 @@ pub struct RamProverPortalManager<F: PrimeField> {
 }
 
 impl<F: PrimeField> PortalManager<F> for RamProverPortalManager<F> {
+    /// 返回current_time_entry的val
     fn get(&mut self, _name: &str) -> Result<FpVar<F>, SynthesisError> {
         // Get the next value
+        // 从 time_ordered_subtrace 和 addr_ordered_subtrace 中取出current（next_entry_id）的 entry
         let current_time_entry: &RamTranscriptEntryVar<F> = self
             .time_ordered_subtrace
             .get(self.next_entry_idx)
@@ -168,6 +179,7 @@ impl<F: PrimeField> PortalManager<F> for RamProverPortalManager<F> {
         let next_time_entry = self.time_ordered_subtrace.get(self.next_entry_idx + 1);
         let next_addr_entry = self.addr_ordered_subtrace.get(self.next_entry_idx + 2);
 
+        // 再往后一个addr_entry，检查地址是否单调不减或与上一个相同(如果相同，且出现了读操作，就要检查值是否相等)。还要限制时间戳单调递增。
         if !next_addr_entry.is_none() {
             let next_addr_entry = next_addr_entry.unwrap();
             // Addr-sorted bookkeeping
@@ -203,6 +215,7 @@ impl<F: PrimeField> PortalManager<F> for RamProverPortalManager<F> {
         }
 
         // Check timestamp if there's a next entry in the time-ordered subtrace
+        // 如果还有下一个time_entry,检查时间戳是否单调递增
         if self.next_entry_idx < self.time_ordered_subtrace.len() - 1 {
             let next_time_entry = next_time_entry.unwrap();
 
@@ -291,6 +304,7 @@ mod tests {
         println!("Address for Alice: {}", address1);
 
         // Getting the same address for Alice
+
         let address2 = address_manager.name_to_addr("Alice");
         println!("Address for Alice: {}", address2);
 
@@ -319,17 +333,19 @@ mod tests {
             let t_var = RamTranscriptEntryVar::new_witness(pm.cs.clone(), || Ok(t)).unwrap();
             time_based_array_var.push(t_var);
         }
+        
 
         // addr-sorted trace has an initial padding entry
         let mut addr_based_array = pm.subtraces[0].clone();
         addr_based_array.sort_by(|a, b| a.addr.cmp(&b.addr));
         addr_based_array.insert(0, RamTranscriptEntry::padding());
-
         let mut addr_based_array_var = Vec::new();
         for t in addr_based_array {
             let t_var = RamTranscriptEntryVar::new_witness(pm.cs.clone(), || Ok(t)).unwrap();
             addr_based_array_var.push(t_var);
         }
+        
+
 
         let one_var = FpVar::new_witness(pm.cs.clone(), || Ok(Fr::one())).unwrap();
         let mut ram_prover = RamProverPortalManager {

@@ -86,7 +86,7 @@ impl CircuitWithPortals<Fr> for VirtualMachine<Fr> {
 
     fn num_subcircuits(&self) -> usize {
         1 << self.params.log_num_subcircuit
-    }
+    } 
 
     fn get_unique_subcircuits(&self) -> Vec<usize> {
         vec![0, 1]

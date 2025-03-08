@@ -32,6 +32,8 @@ pub type Stage0Response = distributed_prover::worker::Stage0Response<E>;
 
 pub type Stage1Response = distributed_prover::worker::Stage1Response<E>;
 
+
+pub const TEST_CIRCUIT_ID: &'static str = "test circuit";
 pub const MERKLE_CIRCUIT_ID: &'static str = "BigMerkle circuit";
 pub const VKD_CIRCUIT_ID: &'static str = "VKD circuit";
 pub const VM_CIRCUIT_ID: &'static str = "VM circuit";

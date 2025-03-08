@@ -32,7 +32,7 @@ The existing scripts for reproducing experiments are specialized for our univers
 
 To simply compile and run experiments *locally*, one can invoke the commands in the following scripts:
 - `slurm_scripts/setup_task.sh` to perform SRS generation
-- `slurm_scripts/my_task.sh` to invoke the distributed prover and benchmark its performance.
+- `slurm_scripts/mytask.sh` to invoke the distributed prover and benchmark its performance.
 
 Specifically, the steps are as follows:
 
@@ -68,3 +68,19 @@ cargo run --release work \
 	--key-file <file_name> \ # the file produced in the steps above
 	--num-workers <num_workers> \ # the number of MPI workers to use for this experiment.
 ```
+cargo run --features parallel --bin node setup-vkd --num-subcircuits 128 --key-out pks-vkd-nc=128.bin
+mpirun -n 33 target/debug/node work --num-workers 32 --key-file pks-vkd-nc=128.bin
+
+cargo run --features parallel --bin node setup-big-merkle --num-subcircuits 16 --num-sha2-iters 8 --num-portals 6  --key-out pks-bm-nc=16-nsha=8-np=6.bin
+
+cargo run --features parallel --bin all_in_one -- --key-file pks-bm-nc=16-nsha=32-np=6.bin --num-concurrent-proofs 32
+
+mpirun -n 17 target/debug/node work --num-workers 16 --key-file pks-bm-nc=16-nsha=32-np=6.bin
+
+mpirun -n 5 target/debug/node work --num-workers 4 --key-file pks-bm-nc=4-nsha=16-np=2.bin
+
+
+
+test:
+cargo run --features parallel --bin node setup-test --num-rows 4 --key-out pks-test-rows=4.bin
+mpirun -n 3 target/debug/node work --num-workers 2 --key-file pks-test-rows=4.bin

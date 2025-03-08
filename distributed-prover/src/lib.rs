@@ -15,6 +15,8 @@ pub mod subcircuit_circuit;
 pub mod tree_hash_circuit;
 pub mod util;
 pub mod worker;
+mod tpch;
+pub mod test_circuit;
 
 use crate::portal_manager::SetupRamPortalManager;
 use portal_manager::{PortalManager, ProverPortalManager};

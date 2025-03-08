@@ -9,6 +9,7 @@ use distributed_prover::{
     util::{cli_filenames::*, deserialize_from_path, serialize_to_path, serialize_to_paths},
     worker::{Stage0Response, Stage1Response},
     CircuitWithPortals,
+    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
 };
 use sha2::Sha256;
 
@@ -29,7 +30,7 @@ struct Args {
 enum Command {
     /// Generates the Groth16 proving keys and aggregation key  for a test circuit consisting of
     /// `n` subcircuits. Places them in coord-state-dir
-    /// cargo run  --bin coordinator gen-keys --g16-pk-dir ./pk-nc=2-ns=4-np=4  --coord-state-dir ./co-nc=2-ns=4-np=4 --num-subcircuits 2 --num-sha2-iters 4 --num-portals 4
+    /// cargo run  --bin test_co gen-keys --g16-pk-dir ./pk-test  --coord-state-dir ./co-test --num-rows 2
     GenKeys {
         /// Directory where the Groth16 proving keys will be stored
         #[clap(long, value_name = "DIR")]
@@ -39,22 +40,14 @@ enum Command {
         #[clap(long, value_name = "DIR")]
         coord_state_dir: PathBuf,
 
-        /// Test circuit param: Number of subcircuits. MUST be a power of two and greater than 1.
-        #[clap(long, value_name = "NUM")]
-        num_subcircuits: usize,
 
-        /// Test circuit param: Number of SHA256 iterations per subcircuit. MUST be at least 1.
         #[clap(long, value_name = "NUM")]
-        num_sha2_iters: usize,
-
-        /// Test circuit param: Number of portal wire ops per subcircuit. MUST be at least 1.
-        #[clap(long, value_name = "NUM")]
-        num_portals: usize,
+        num_rows: usize,
     },
 
     /// Begins stage0 for a random proof for a large circuit with the given parameters. This
     /// produces _worker request packages_ which are processed in parallel by worker nodes.
-    /// cargo run  --bin coordinator start-stage0 --req-dir ./req  --coord-state-dir ./co-nc=2-ns=4-np=4
+    /// cargo run  --bin test_co start-stage0 --req-dir ./req  --coord-state-dir ./co-test
     StartStage0 {
         /// Directory where the coordinator's intermediate state is stored.
         #[clap(short, long, value_name = "DIR")]
@@ -66,7 +59,7 @@ enum Command {
     },
 
     /// Process the stage0 responses from workers and produce stage1 reqeusts
-    /// cargo run  --bin coordinator start-stage1 --req-dir ./req  --coord-state-dir ./co-nc=2-ns=4-np=4 --resp-dir ./resp-s0
+    /// cargo run  --bin test_co start-stage1 --req-dir ./req  --coord-state-dir ./co-test --resp-dir ./resp-s0
     StartStage1 {
         /// Directory where the coordinator's intermediate state is stored.
         #[clap(long, value_name = "DIR")]
@@ -82,7 +75,7 @@ enum Command {
     },
 
     /// Process the stage1 responses from workers and produce a final aggregate
-    /// cargo run  --bin coordinator end-proof --coord-state-dir ./co-nc=2-ns=4-np=4 --resp-dir ./resp-s1
+    /// cargo run  --bin test_co end-proof --coord-state-dir ./co-test --resp-dir ./resp-s1
     EndProof {
         /// Directory where the coordinator's intermediate state is stored.
         #[clap(short, long, value_name = "DIR")]
@@ -95,34 +88,18 @@ enum Command {
 
 // Checks the test circuit parameters and puts them in a struct
 fn gen_test_circuit_params(
-    num_subcircuits: usize,
-    num_sha_iterations: usize,
-    num_portals_per_subcircuit: usize,
-) -> MerkleTreeCircuitParams {
-    assert!(
-        num_subcircuits.is_power_of_two(),
-        "#subcircuits MUST be a power of 2"
-    );
-    assert!(num_subcircuits > 1, "num. of subcircuits MUST be > 1");
-    assert!(
-        num_sha_iterations > 0,
-        "num. of SHA256 iterations per subcircuit MUST be > 0"
-    );
-    assert!(
-        num_portals_per_subcircuit > 0,
-        "num. of portal ops per subcircuit MUST be > 0"
-    );
+    num_rows: usize,
+) -> ZkDbSqlCircuitParams {
+    assert!(num_rows > 1, "num. of subcircuits MUST be > 1");
 
-    MerkleTreeCircuitParams {
-        num_leaves: num_subcircuits / 2,
-        num_sha_iters_per_subcircuit: num_sha_iterations,
-        num_portals_per_subcircuit,
+    ZkDbSqlCircuitParams {
+        num_rows: num_rows,
     }
 }
 
 /// Generates all the Groth16 proving and committing keys keys that the workers will use
 fn generate_g16_pks(
-    circ_params: MerkleTreeCircuitParams,
+    circ_params: ZkDbSqlCircuitParams,
     g16_pk_dir: &PathBuf,
     coord_state_dir: &PathBuf,
 ) {
@@ -130,168 +107,56 @@ fn generate_g16_pks(
     let tree_params = gen_merkle_params();
 
     // Make an empty circuit of the correct size
-    let circ = <MerkleTreeCircuit as CircuitWithPortals<Fr>>::new(&circ_params);
-    let num_subcircuits = <MerkleTreeCircuit as CircuitWithPortals<Fr>>::num_subcircuits(&circ);
+    let circ = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::new(&circ_params);
+    let num_subcircuits = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::num_subcircuits(&circ);
 
     let generator = G16ProvingKeyGenerator::<TreeConfig, TreeConfigVar, E, _>::new(
         circ.clone(),
         tree_params.clone(),
     );
     // ****提问：G16ProvingKeyGenerator所传入的参数是整体circ，tree_params?还是subcircuit。为什么pk是merkle树的形式。是test circuit？如果有数个不同参数的子电路，是需要多个generator？
+    // ****应该是整体circ
+ 
+    let first_pk = generator.gen_pk(&mut rng, 0);
+    let second_pk = generator.gen_pk(&mut rng, 1);
 
-    // We don't actually have to generate every circuit proving key individually. Remember the test
-    // circuit only really has 5 subcircuits: the first leaf, the root, every other leaf, every
-    // other parent, and the final padding circuit. So we only have to generate 5 proving keys and
-    // copy them a bunch of times.
-
-    // First a special case: if there's just 4 subcircuits, generate them all and be done with it
-    if num_subcircuits <= 4 {
-        // Generate the subcircuit's G16 proving keys
-        let pks = (0..num_subcircuits)
-            .map(|subcircuit_idx| generator.gen_pk(&mut rng, subcircuit_idx))
-            .collect::<Vec<_>>();
-
-        // Save them and the corresponding committing key
-        for (subcircuit_idx, pk) in pks.iter().enumerate() {
-            serialize_to_path(pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(subcircuit_idx))
-                .unwrap();
-            // Save the corresponding committing key
-            serialize_to_path(
-                &pk.ck,
-                g16_pk_dir,
-                G16_CK_FILENAME_PREFIX,
-                Some(subcircuit_idx),
-            )
-            .unwrap();
-        }
-
-        let pk_fetcher = |subcircuit_idx: usize| &pks[subcircuit_idx];
-
-        // Construct the aggregator commitment key
-        let start =
-            start_timer!(|| format!("Generating aggregation key with params {circ_params}"));
-        let agg_ck = {
-            let (tipp_pk, _tipp_vk) = TIPA::<E, Sha256>::setup(num_subcircuits, &mut rng).unwrap();
-            AggProvingKey::new(tipp_pk, pk_fetcher)
-        };
-        end_timer!(start);
-
-        // Save the aggregator key
-        println!("Writing aggregation key");
-        serialize_to_path(&agg_ck, coord_state_dir, AGG_CK_FILENAME_PREFIX, None).unwrap();
-
-        return;
-    }
-
-    // Now if there are more than 4 subcircuits:
-
-    // Generate the first leaf
-    let first_leaf_pk = generator.gen_pk(&mut rng, 0);
-    // Generate the second leaf
-    let second_leaf_pk = generator.gen_pk(&mut rng, 1);
-    // Generate the padding
-    let padding_pk = generator.gen_pk(&mut rng, num_subcircuits - 1);
-    // Generate the root
-    let root_pk = generator.gen_pk(&mut rng, num_subcircuits - 2);
-    // Generate the second to last parent
-    let parent_pk = generator.gen_pk(&mut rng, num_subcircuits - 3);
 
     // Now save them
 
-    // Save the first leaf (proving key and committing key)
-    println!("Writing first leaf proving key");
-    serialize_to_path(&first_leaf_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(0)).unwrap();
+    println!("Writing first proving key");
+    serialize_to_path(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(0)).unwrap();
     serialize_to_path(
-        &first_leaf_pk.ck,
+        &first_pk.ck,
         g16_pk_dir,
         G16_CK_FILENAME_PREFIX,
         Some(0),
     )
     .unwrap();
 
-    // Save all the rest of the leaves
-    println!("Writing leaf proving keys");
-    let other_leaf_idxs = 1..(num_subcircuits / 2);
-    serialize_to_paths(
-        &second_leaf_pk,
+    println!("Writing second proving keys");
+    serialize_to_path(
+        &second_pk,
         g16_pk_dir,
         G16_PK_FILENAME_PREFIX,
-        other_leaf_idxs.clone(),
+        Some(1),
     )
     .unwrap();
-    serialize_to_paths(
-        &second_leaf_pk.ck,
+    serialize_to_path(
+        &second_pk.ck,
         g16_pk_dir,
         G16_CK_FILENAME_PREFIX,
-        other_leaf_idxs.clone(),
+        Some(1),
     )
     .unwrap();
 
-    // Save all the parents
-    println!("Writing parent proving keys");
-    let parent_idxs = (num_subcircuits / 2)..(num_subcircuits - 2);
-    serialize_to_paths(
-        &parent_pk,
-        g16_pk_dir,
-        G16_PK_FILENAME_PREFIX,
-        parent_idxs.clone(),
-    )
-    .unwrap();
-    serialize_to_paths(
-        &parent_pk.ck,
-        g16_pk_dir,
-        G16_CK_FILENAME_PREFIX,
-        parent_idxs.clone(),
-    )
-    .unwrap();
-
-    // Save the root
-    println!("Writing root proving key");
-    serialize_to_path(
-        &root_pk,
-        g16_pk_dir,
-        G16_PK_FILENAME_PREFIX,
-        Some(num_subcircuits - 2),
-    )
-    .unwrap();
-    serialize_to_path(
-        &root_pk.ck,
-        g16_pk_dir,
-        G16_CK_FILENAME_PREFIX,
-        Some(num_subcircuits - 2),
-    )
-    .unwrap();
-
-    // Save the padding
-    println!("Writing padding proving key");
-    serialize_to_path(
-        &padding_pk,
-        g16_pk_dir,
-        G16_PK_FILENAME_PREFIX,
-        Some(num_subcircuits - 1),
-    )
-    .unwrap();
-    serialize_to_path(
-        &padding_pk.ck,
-        g16_pk_dir,
-        G16_CK_FILENAME_PREFIX,
-        Some(num_subcircuits - 1),
-    )
-    .unwrap();
 
     // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
     // disk, but this might take a long long time.
     let pk_fetcher = |subcircuit_idx: usize| {
         if subcircuit_idx == 0 {
-            &first_leaf_pk
-        } else if other_leaf_idxs.contains(&subcircuit_idx) {
-            &second_leaf_pk
-        } else if parent_idxs.contains(&subcircuit_idx) {
-            &parent_pk
-        } else if subcircuit_idx == num_subcircuits - 2 {
-            &root_pk
-        } else if subcircuit_idx == num_subcircuits - 1 {
-            &padding_pk
+            &first_pk
+        } else if subcircuit_idx == 1 {
+            &second_pk
         } else {
             panic!("unexpected subcircuit index {subcircuit_idx}")
         }
@@ -316,22 +181,21 @@ fn begin_stage0(worker_req_dir: &PathBuf, coord_state_dir: &PathBuf) -> io::Resu
 
     let circ_params_timer = start_timer!(|| "Deserializing circuit parameters");
     // Get the circuit parameters determined at Groth16 PK generation
-    let circ_params = deserialize_from_path::<MerkleTreeCircuitParams>(
+    let circ_params = deserialize_from_path::<ZkDbSqlCircuitParams>(
         &coord_state_dir,
         TEST_CIRC_PARAM_FILENAME_PREFIX,
         None,
     )
     .unwrap();
     end_timer!(circ_params_timer);
-    // Num subcircuits is 2× num leaves
-    let num_subcircuits = 2 * circ_params.num_leaves;
+    let num_subcircuits = 2;
 
-    let merkle_tree_timer =
-        start_timer!(|| format!("Sampling a random MerkleTreeCircuit with parapms {circ_params}"));
+    let rand_circuit_timer =
+        start_timer!(|| format!("Sampling a random Circuit with parapms {circ_params}"));
     // Make a random circuit with the given parameters
     println!("Making a random circuit");
-    let circ = <MerkleTreeCircuit as CircuitWithPortals<Fr>>::rand(&mut rng, &circ_params);
-    end_timer!(merkle_tree_timer);
+    let circ = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::rand(&mut rng, &circ_params);
+    end_timer!(rand_circuit_timer);
 
     // Make the stage0 coordinator state
     println!("Building stage0 state");
@@ -377,17 +241,17 @@ fn process_stage0_resps(coord_state_dir: &PathBuf, req_dir: &PathBuf, resp_dir: 
     let tree_params = gen_merkle_params();
 
     // Get the circuit parameters determined at Groth16 PK generation
-    let circ_params = deserialize_from_path::<MerkleTreeCircuitParams>(
+    let circ_params = deserialize_from_path::<ZkDbSqlCircuitParams>(
         &coord_state_dir,
         TEST_CIRC_PARAM_FILENAME_PREFIX,
         None,
     )
     .unwrap();
     // Num subcircuits is 2× num leaves
-    let num_subcircuits = 2 * circ_params.num_leaves;
+    let num_subcircuits = 2;
 
     // Deserialize the coordinator's state and the aggregation key
-    let coord_state = deserialize_from_path::<CoordinatorStage0State<E, MerkleTreeCircuit>>(
+    let coord_state = deserialize_from_path::<CoordinatorStage0State<E, ZkDbSqlCircuit<Fr>>>(
         coord_state_dir,
         STAGE0_COORD_STATE_FILENAME_PREFIX,
         None,
@@ -455,14 +319,14 @@ fn process_stage0_resps(coord_state_dir: &PathBuf, req_dir: &PathBuf, resp_dir: 
 
 fn process_stage1_resps(coord_state_dir: &PathBuf, resp_dir: &PathBuf) {
     // Get the circuit parameters determined at Groth16 PK generation
-    let circ_params = deserialize_from_path::<MerkleTreeCircuitParams>(
+    let circ_params = deserialize_from_path::<ZkDbSqlCircuitParams>(
         &coord_state_dir,
         TEST_CIRC_PARAM_FILENAME_PREFIX,
         None,
     )
     .unwrap();
     // Num subcircuits is 2× num leaves
-    let num_subcircuits = 2 * circ_params.num_leaves;
+    let num_subcircuits = 2;
 
     // Deserialize the coordinator's final state, the aggregation key
     let final_agg_state = deserialize_from_path::<FinalAggState<E>>(
@@ -508,12 +372,10 @@ fn main() {
         Command::GenKeys {
             g16_pk_dir,
             coord_state_dir,
-            num_subcircuits,
-            num_sha2_iters,
-            num_portals,
+            num_rows,
         } => {
             // Make the circuit params and save them to disk
-            let circ_params = gen_test_circuit_params(num_subcircuits, num_sha2_iters, num_portals);
+            let circ_params: ZkDbSqlCircuitParams = gen_test_circuit_params(num_rows);
             serialize_to_path(
                 &circ_params,
                 &coord_state_dir,

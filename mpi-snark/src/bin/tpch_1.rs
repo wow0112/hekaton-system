@@ -3,7 +3,6 @@
 use ark_std::{cfg_chunks, cfg_chunks_mut, cfg_into_iter, cfg_iter};
 use distributed_prover::{
     tree_hash_circuit::{MerkleTreeCircuit, MerkleTreeCircuitParams},
-    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
     vkd::{
         MerkleTreeParameters, VerifiableKeyDirectoryCircuit, VerifiableKeyDirectoryCircuitParams,
     },
@@ -26,7 +25,7 @@ use mpi_snark::{
     coordinator::CoordinatorState,
     data_structures::{
         ProvingKeys, Stage0Request, Stage0Response, Stage1Request, Stage1Response,
-        MERKLE_CIRCUIT_ID, VKD_CIRCUIT_ID, VM_CIRCUIT_ID,TEST_CIRCUIT_ID
+        MERKLE_CIRCUIT_ID, VKD_CIRCUIT_ID, VM_CIRCUIT_ID,
     },
     deserialize_flattened_bytes, deserialize_from_packed_bytes, serialize_to_packed_vec,
     serialize_to_vec,
@@ -89,16 +88,6 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    SetupTest {
-        /// Test circuit param: Number of subcircuits. MUST be a power of two and greater than 1.
-        #[clap(long, value_name = "NUM")]
-        num_rows: usize,
-
-        /// Path for the output coordinator key package
-        #[clap(long, value_name = "DIR")]
-        key_out: PathBuf,
-    },
-
     SetupBigMerkle {
         /// Test circuit param: Number of subcircuits. MUST be a power of two and greater than 1.
         #[clap(long, value_name = "NUM")]
@@ -162,10 +151,6 @@ fn main() {
     let args = Args::parse();
 
     match args.command {
-        Command::SetupTest {
-            num_rows,
-            key_out,
-        } => setup_test_circuit(key_out, num_rows),
         Command::SetupBigMerkle {
             num_subcircuits,
             num_sha2_iters,
@@ -239,33 +224,12 @@ fn main() {
                 println!("Number of VM CPU registers: {}", REGISTER_NUM);
 
                 work::<VirtualMachine<Fr>>(num_workers, proving_keys);
-            }else if circ_id == TEST_CIRCUIT_ID{
-                let params = ZkDbSqlCircuitParams::deserialize_uncompressed_unchecked(
-                    proving_keys.serialized_circ_params.as_slice(),
-                ).unwrap();
-                work::<ZkDbSqlCircuit<Fr>>(num_workers, proving_keys);
             } else {
                 panic!("unknown circuit ID {circ_id}")
             }
         },
     }
 }
-
-fn setup_test_circuit(  
-    key_out_path: PathBuf, 
-    num_rows: usize,
-){
-    let circ_params: ZkDbSqlCircuitParams = ZkDbSqlCircuitParams {
-        num_rows: num_rows,
-    };
-    let pks = ProvingKeys::new::<ZkDbSqlCircuit<Fr>>(circ_params, TEST_CIRCUIT_ID.to_string());
-    let mut buf = Vec::new();
-    pks.serialize_uncompressed(&mut buf).unwrap();
-    let mut f =
-    File::create(&key_out_path).expect(&format!("could not create file {:?}", key_out_path));
-    f.write_all(&buf).unwrap();
-}
-
 
 fn setup_big_merkle(
     key_out_path: PathBuf,
@@ -494,7 +458,8 @@ fn work<P: CircuitWithPortals<Fr>>(num_workers: usize, proving_keys: ProvingKeys
         // Stage 1
 
         // Receive Stage 1 request
-        let requests: Vec<Stage1Request<_>> =receive_requests(&mut log, rank, "stage1", &root_process);
+        let requests: Vec<Stage1Request<_>> =
+            receive_requests(&mut log, rank, "stage1", &root_process);
 
         // Compute Stage 1 response
         let start = start_timer_buf!(log, || format!("Worker {rank}: Processing stage1 request"));

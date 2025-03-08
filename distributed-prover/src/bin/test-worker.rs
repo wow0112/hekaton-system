@@ -4,6 +4,7 @@ use distributed_prover::{
     tree_hash_circuit::MerkleTreeCircuit,
     util::{cli_filenames::*, deserialize_from_path, serialize_to_path, G16ProvingKey},
     worker::Stage0Response,
+    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
 };
 
 use std::path::PathBuf;
@@ -21,7 +22,7 @@ struct Args {
 #[derive(Subcommand)]
 enum Command {
     /// Processes the stage0 requests issued by the coordinator
-    /// cargo run  --bin worker process-stage0-request --g16-pk-dir ./pk-nc=2-ns=4-np=4 --req-dir ./req  --out-dir ./resp-s0 --subcircuit-index 0
+    /// cargo run --bin test-worker process-stage0-request --g16-pk-dir ./pk-test --req-dir ./req  --out-dir ./resp-s0 --subcircuit-index 0
     ProcessStage0Request {
         /// Directory where the Groth16 proving keys are stored
         #[clap(short, long, value_name = "DIR")]
@@ -41,7 +42,7 @@ enum Command {
     },
 
     /// Process the stage0 responses from workers and produce stage1 reqeusts
-    /// cargo run  --bin worker process-stage1-request --g16-pk-dir ./pk-nc=2-ns=4-np=4 --req-dir ./req  --resp-dir ./resp-s0 --out-dir ./resp-s1 --subcircuit-index 0
+    /// cargo run --bin test-worker process-stage1-request --g16-pk-dir ./pk-test --req-dir ./req  --resp-dir ./resp-s0 --out-dir ./resp-s1 --subcircuit-index 0
     ProcessStage1Request {
         /// Directory where the Groth16 proving keys are stored
         #[clap(long, value_name = "DIR")]
@@ -101,7 +102,7 @@ fn process_stage0_request(
         _,
         TreeConfigVar,
         _,
-        MerkleTreeCircuit,
+        ZkDbSqlCircuit<Fr>,
         _,
     >(&mut rng, tree_params, &g16_pk, stage0_req);
     end_timer!(start);
@@ -145,7 +146,7 @@ fn process_stage1_request(
         Some(subcircuit_idx),
     )
     .unwrap();
-    let stage1_req = deserialize_from_path::<Stage1Request<_, _, MerkleTreeCircuit>>(
+    let stage1_req = deserialize_from_path::<Stage1Request<_, _, ZkDbSqlCircuit<Fr>>>(
         req_dir,
         STAGE1_REQ_FILENAME_PREFIX,
         Some(subcircuit_idx),

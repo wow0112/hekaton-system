@@ -1,3 +1,4 @@
+/// 一个单机（整体式）证明系统，整体生成并证明一个封装了所有子电路的电路，它没有分布式多节点的协作，仅通过单一程序直接生成证明。
 use distributed_prover::{
     portal_manager::PortalManager,
     poseidon_util::{

@@ -1,3 +1,4 @@
+/// 分布式证明系统的基准测试程序。模拟协调者与工人之间的多阶段交互（阶段 0 与阶段 1），并最终聚合证明。
 use ark_ip_proofs::tipa::{Proof as AggProof, TIPA};
 use distributed_prover::{
     aggregation::AggProvingKey,
@@ -63,11 +64,11 @@ fn generate_g16_pk(
         tree_params.clone(),
     );
 
-    c.map(|c| {
-        c.bench_function(&format!("Coord: generating 1 G16 PK {circ_params}"), |b| {
-            b.iter(|| generator.gen_pk(&mut rng, 0))
-        })
-    });
+    // c.map(|c| {
+    //     c.bench_function(&format!("Coord: generating 1 G16 PK {circ_params}"), |b| {
+    //         b.iter(|| generator.gen_pk(&mut rng, 0))
+    //     })
+    // });
 
     let first_leaf_pk = generator.gen_pk(&mut rng, 0);
 
@@ -89,11 +90,11 @@ fn generate_agg_ck<'a>(
     // verification is resolved.
     let (tipp_pk, _tipp_vk) = TIPA::<E, Sha256>::setup(num_subcircuits, &mut rng).unwrap();
 
-    c.map(|c| {
-        c.bench_function(&format!("Coord: generating agg ck {circ_params}"), |b| {
-            b.iter(|| AggProvingKey::new(tipp_pk.clone(), pk_fetcher))
-        })
-    });
+    // c.map(|c| {
+    //     c.bench_function(&format!("Coord: generating agg ck {circ_params}"), |b| {
+    //         b.iter(|| AggProvingKey::new(tipp_pk.clone(), pk_fetcher))
+    //     })
+    // });
 
     AggProvingKey::new(tipp_pk, pk_fetcher)
 }
@@ -112,21 +113,21 @@ fn begin_stage0(
 
     // Make the stage0 coordinator state
 
-    c.as_mut().map(|c| {
-        c.bench_function(&format!("Coord: computing full trace {circ_params}"), |b| {
-            b.iter(|| CoordinatorStage0State::<E, _>::new::<TreeConfig>(circ.clone()))
-        })
-    });
+    // c.as_mut().map(|c| {
+    //     c.bench_function(&format!("Coord: computing full trace {circ_params}"), |b| {
+    //         b.iter(|| CoordinatorStage0State::<E, _>::new::<TreeConfig>(circ.clone()))
+    //     })
+    // });
 
     let stage0_state = CoordinatorStage0State::<E, _>::new::<TreeConfig>(circ);
 
     // Sender sends stage0 requests containing the subtraces. Workers will commit to these
-    c.map(|c| {
-        c.bench_function(
-            &format!("Coord: generating 1 stage0 req {circ_params}"),
-            |b| b.iter(|| stage0_state.gen_request(0)),
-        )
-    });
+    // c.map(|c| {
+    //     c.bench_function(
+    //         &format!("Coord: generating 1 stage0 req {circ_params}"),
+    //         |b| b.iter(|| stage0_state.gen_request(0)),
+    //     )
+    // });
     let req = stage0_state.gen_request(0).to_owned();
 
     (stage0_state, req)
@@ -142,22 +143,22 @@ fn process_stage0_requests(
     let tree_params = gen_merkle_params();
 
     // Compute the response
-    c.map(|c| {
-        c.bench_function(
-            &format!("Worker: computing 1 stage0 resp {circ_params}"),
-            |b| {
-                b.iter(|| {
-                    distributed_prover::worker::process_stage0_request::<
-                        _,
-                        TreeConfigVar,
-                        _,
-                        MerkleTreeCircuit,
-                        _,
-                    >(&mut rng, tree_params.clone(), &g16_pk, stage0_req.clone())
-                })
-            },
-        )
-    });
+    // c.map(|c| {
+    //     c.bench_function(
+    //         &format!("Worker: computing 1 stage0 resp {circ_params}"),
+    //         |b| {
+    //             b.iter(|| {
+    //                 distributed_prover::worker::process_stage0_request::<
+    //                     _,
+    //                     TreeConfigVar,
+    //                     _,
+    //                     MerkleTreeCircuit,
+    //                     _,
+    //                 >(&mut rng, tree_params.clone(), &g16_pk, stage0_req.clone())
+    //             })
+    //         },
+    //     )
+    // });
 
     distributed_prover::worker::process_stage0_request::<_, TreeConfigVar, _, MerkleTreeCircuit, _>(
         &mut rng,
@@ -183,20 +184,20 @@ fn process_stage0_resps(
     let stage0_resps = vec![stage0_resp; num_subcircuits];
 
     // Process the responses and get a new coordinator state
-    c.map(|c| {
-        c.bench_function(
-            &format!("Coord: committing to stage0 resps {circ_params}"),
-            |b| {
-                b.iter(|| {
-                    stage0_state.clone().process_stage0_responses(
-                        &agg_ck.tipp_pk,
-                        tree_params.clone(),
-                        &stage0_resps,
-                    )
-                })
-            },
-        )
-    });
+    // c.map(|c| {
+    //     c.bench_function(
+    //         &format!("Coord: committing to stage0 resps {circ_params}"),
+    //         |b| {
+    //             b.iter(|| {
+    //                 stage0_state.clone().process_stage0_responses(
+    //                     &agg_ck.tipp_pk,
+    //                     tree_params.clone(),
+    //                     &stage0_resps,
+    //                 )
+    //             })
+    //         },
+    //     )
+    // });
 
     let new_coord_state =
         stage0_state.process_stage0_responses(&agg_ck.tipp_pk, tree_params, &stage0_resps);
@@ -218,23 +219,23 @@ fn process_stage1_requests(
     let tree_params = gen_merkle_params();
 
     // Compute the response. This is a Groth16 proof over a potentially large circuit
-    c.map(|c| {
-        c.bench_function(
-            &format!("Worker: computing 1 stage1 resp {circ_params}"),
-            |b| {
-                b.iter(|| {
-                    distributed_prover::worker::process_stage1_request::<_, TreeConfigVar, _, _, _>(
-                        &mut rng,
-                        tree_params.clone(),
-                        &g16_pk,
-                        stage0_req.clone(),
-                        &stage0_resp,
-                        stage1_req.clone(),
-                    )
-                })
-            },
-        )
-    });
+    // c.map(|c| {
+    //     c.bench_function(
+    //         &format!("Worker: computing 1 stage1 resp {circ_params}"),
+    //         |b| {
+    //             b.iter(|| {
+    //                 distributed_prover::worker::process_stage1_request::<_, TreeConfigVar, _, _, _>(
+    //                     &mut rng,
+    //                     tree_params.clone(),
+    //                     &g16_pk,
+    //                     stage0_req.clone(),
+    //                     &stage0_resp,
+    //                     stage1_req.clone(),
+    //                 )
+    //             })
+    //         },
+    //     )
+    // });
 
     distributed_prover::worker::process_stage1_request::<_, TreeConfigVar, _, _, _>(
         &mut rng,
@@ -256,15 +257,16 @@ fn process_stage1_resps(
     let num_subcircuits = 2 * circ_params.num_leaves;
     let stage1_resps = vec![stage1_resp; num_subcircuits];
 
-    c.map(|c| {
-        c.bench_function(&format!("Coord: agg stage1 resps {circ_params}"), |b| {
-            b.iter(|| final_agg_state.gen_agg_proof(&agg_ck, &stage1_resps))
-        })
-    });
+    // c.map(|c| {
+    //     c.bench_function(&format!("Coord: agg stage1 resps {circ_params}"), |b| {
+    //         b.iter(|| final_agg_state.gen_agg_proof(&agg_ck, &stage1_resps))
+    //     })
+    // });
 
     final_agg_state.gen_agg_proof(&agg_ck, &stage1_resps)
 }
 
+//#region
 fn show_portal_constraint_tradeoff(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
     let tree_params = gen_merkle_params();
@@ -352,6 +354,7 @@ fn show_portal_constraint_tradeoff(c: &mut Criterion) {
         circ_params.num_portals_per_subcircuit -= 2 * sha2_iter_in_portals;
     }
 }
+//#endregion
 
 /// Starts a thread which prints memory consumption every second
 /*
@@ -373,6 +376,8 @@ pub fn start_memory_printer() {
 }
 */
 
+
+//#region
 fn aggregation(_c: &mut Criterion) {
     //start_memory_printer();
 
@@ -431,6 +436,7 @@ fn aggregation(_c: &mut Criterion) {
         end_timer!(start);
     }
 }
+//#endregion
 
 fn microbenches(c: &mut Criterion) {
     for num_subcircuits in [4] {
@@ -470,7 +476,8 @@ fn microbenches(c: &mut Criterion) {
 
 criterion_group!(
     name = benches;
-    config = Criterion::default();//.sample_size(20);
-    targets = microbenches, aggregation, show_portal_constraint_tradeoff
+    config = Criterion::default().sample_size(10);
+    targets = microbenches
+    // targets = microbenches, aggregation, show_portal_constraint_tradeoff
 );
 criterion_main!(benches);

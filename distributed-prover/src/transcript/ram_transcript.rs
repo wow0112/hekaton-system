@@ -46,6 +46,7 @@ impl<F: PrimeField> Default for RamRunningEvaluation<F> {
 
 impl<F: PrimeField> RamRunningEvaluation<F> {
     /// Hash the trace commitment to calculate the challenges for the running eval
+    /// 对 trace commitment 进行哈希，计算运行评估的挑战
     /// TODO: Add a lot of context binding here. Don't want a weak fiat shamir
     pub fn new<E>(com: &IppCom<E>) -> RamRunningEvaluation<F>
     where
@@ -97,6 +98,7 @@ impl<F: PrimeField> RamRunningEvaluation<F> {
     }
 
     /// Updates the running evaluation of the time-ordered transcript polynomial
+    /// 根据 challenges 更新时间顺序的迹多项式的运行评估
     pub fn update_time_ordered(&mut self, entry: &RamTranscriptEntry<F>) {
         // Unpack challenges
         let (entry_chal_1, entry_chal_2, entry_chal_3, tr_chal) = self
@@ -116,6 +118,7 @@ impl<F: PrimeField> RamRunningEvaluation<F> {
     }
 
     /// Updates the running evaluation of the addr-ordered transcript polynomial
+    /// 根据 challenges 更新地址顺序的迹多项式的运行评估
     pub fn update_addr_ordered(&mut self, entry: &RamTranscriptEntry<F>) {
         // Unpack challenges
         let (entry_chal_1, entry_chal_2, entry_chal_3, tr_chal) = self
@@ -413,7 +416,6 @@ mod test {
         )
         .unwrap();
         let ram_transcript_2 = RamTranscriptEntryVar::value(&ram_var).unwrap();
-        println!("{:?}", ram_transcript_2);
         assert_eq!(ram_transcript, ram_transcript_2);
     }
 

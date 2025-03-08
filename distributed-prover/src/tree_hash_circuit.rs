@@ -38,6 +38,8 @@ fn input_digest<F: PrimeField>(
 
 /// The tree thas to be evaluated level-by-level. So we need to be able to map a subcircuit idx to
 /// a node in the tree in a specific order
+/// 树需要逐层评估，所以需要将子电路索引映射到树中的特定顺序的节点
+/// 函数定义了子电路索引到树上节点索引的映射。Merkle 树电路中的每个子电路对应树上的一个节点，节点索引按照从上到下、从左到右的顺序排列。
 fn subcircuit_idx_to_node_idx(subcircuit_idx: usize, num_leaves: usize) -> u32 {
     let mut i = 0;
 
@@ -184,18 +186,22 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         }
     }
 
+    /// 根据子电路编号，返回该子电路对应的 witness（序列化为字节）
     fn get_serialized_witnesses(&self, subcircuit_idx: usize) -> Vec<u8> {
         let num_leaves = self.leaves.len();
         let num_subcircuits = <Self as CircuitWithPortals<F>>::num_subcircuits(&self);
         let mut out_buf = Vec::new();
 
         // If this is a padding circuit, return nothing
+        // 占位子电路什么也不返回
         if subcircuit_idx == num_subcircuits - 1 {
             return Vec::with_capacity(0);
         }
 
         // The witnesses for subcircuit i is either a leaf value (in the case this is a leaf) or a
         // root hash (if this is the root)
+        // 根据节点在树中的位置判断：若为叶子节点，则取出对应的叶子数据；
+        // 若为根节点，则返回根哈希；
 
         // The subcircuit ordering is level by level. Pick the right node idx
         let node_idx = subcircuit_idx_to_node_idx(subcircuit_idx, num_leaves);
@@ -216,6 +222,8 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         out_buf
     }
 
+    /// 根据提供的字节，设置相应子电路的 witness 状态
+    /// 同样根据节点属性（叶子或根），从序列化字节恢复出 witness，并更新到电路状态中。
     fn set_serialized_witnesses(&mut self, subcircuit_idx: usize, bytes: &[u8]) {
         let num_leaves = self.leaves.len();
         let num_subcircuits = <Self as CircuitWithPortals<F>>::num_subcircuits(&self);
@@ -261,6 +269,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
 
         // The special padding subcircuit lies outside the tree. If it's the last subcircuit,
         // do some iterated hashes and throw them away
+        // 占位子电路：执行 SHA256 迭代但结果不保存
         if is_padding {
             let input = UInt8::new_witness_vec(ns!(cs, "padding input"), &EMPTY_LEAF)?;
             let _ = self.iterated_sha256(&input)?;
@@ -271,10 +280,13 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
             let node_idx = subcircuit_idx_to_node_idx(subcircuit_idx, num_leaves);
 
             // Every non-padding node is a leaf, the root, or else a parent
+            // 判断该节点是叶子、根节点或中间父节点
             let is_leaf = level(node_idx) == 0;
             let is_root = root_idx(num_leaves) == node_idx;
 
             if is_leaf {
+                // 对叶子节点：取出对应叶子的 witness，并用 iterated_sha256 计算叶子的哈希值，
+                // 将计算结果通过 portal manager set 存储下来
                 // This is a leaf node. Get the leaf number
                 let leaf_idx = (node_idx / 2) as usize;
 
@@ -285,6 +297,10 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
                 let leaf_hash = self.iterated_sha256(&leaf_var)?;
                 pm.set(format!("node {node_idx} hash"), &leaf_hash)?;
             } else {
+                // 对于非根的父节点：
+                // 1. 从 portal manager 中获取左右孩子节点的哈希
+                // 2. 将左右子节点的有限域变量转换成字节序列，并连接起来
+                // 3. 计算父节点的 iterated_sha256，再存入 portal manager
                 // This is a non-root parent node. Get the left and right hashes
                 let left = left_child(node_idx);
                 let right = right_child(node_idx);
@@ -302,6 +318,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
 
                 // Finally, if this is the root, verify that the parent hash equals the public hash
                 // value
+                // 如果当前子电路正好代表根节点，则 verify 计算出的父节点哈希必须等于公开的根哈希
                 if is_root {
                     let expected_root_hash = input_digest(cs.clone(), self.root_hash)?;
                     parent_hash.enforce_equal(&expected_root_hash)?;
@@ -311,6 +328,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
 
         // Do some placeholder memory operations
         // First, set the portal value. Only need to do this once.
+        // 以下为 portal 的占位操作（dummy memory operations）
         if subcircuit_idx == 0 {
             let _ = pm.set(
                 "placeholder".to_string(),
@@ -318,11 +336,13 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
             )?;
         }
         // Now hammer the portal wire
+        // 针对参数设置的 portal 数量，多次执行 get 操作模拟电路中的传递
         for _ in 0..self.params.num_portals_per_subcircuit - 1 {
             let _ = pm.get("placeholder")?;
         }
 
         // Print out how big this circuit was
+        // 输出当前子电路所产生的约束数
         let ending_num_constraints = cs.num_constraints();
         println!(
             "Test subcircuit {subcircuit_idx} costs {} constraints",
@@ -339,6 +359,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         let num_subcircuits = num_leaves * 2;
 
         // A helper lambda to iteratively hash the input based on params
+        // 直接调用的是标准库中的 SHA256 运算，而不是零知识证明中的 gadget，因此不生成约束，也不涉及复杂电路的计算过程，只是简单地进行哈希计算。
         let iterated_sha256 = |input: &[u8]| {
             let mut digest = input.to_vec();
             for _ in 0..self.params.num_sha_iters_per_subcircuit {
@@ -364,15 +385,17 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         let mut pm = SetupRomPortalManager::new(cs.clone());
 
         // Hash every leaf and compute the SET operation for it
+        // 对所有叶子，依次启动一个新的子轨迹
+        // 对每个叶子，计算其哈希值，将值转换为有限域变量，并存储在 portal manager 中。同时执行占位的 set 和 dummy get 操作。
         for (subcircuit_idx, leaf) in self.leaves.iter().enumerate() {
             // Every leaf is its own subcircuit, so it gets its own subtrace
             pm.start_subtrace(ConstraintSystem::new_ref());
             let leaf_hash = iterated_sha256(leaf);
 
             // Compute the label and value corresponding to this portal wire
-            let node_idx = subcircuit_idx_to_node_idx(subcircuit_idx, num_leaves);
-            let leaf_hash_var = UInt8::new_witness_vec(ns!(cs, "leaf hash"), &leaf_hash).unwrap();
-            let leaf_hash_fpvar = digest_to_fpvar(DigestVar(leaf_hash_var)).unwrap();
+            let node_idx: u32 = subcircuit_idx_to_node_idx(subcircuit_idx, num_leaves);
+            let leaf_hash_var: Vec<UInt8<F>> = UInt8::new_witness_vec(ns!(cs, "leaf hash"), &leaf_hash).unwrap();
+            let leaf_hash_fpvar: FpVar<F> = digest_to_fpvar(DigestVar(leaf_hash_var)).unwrap();
 
             // Set the value
             let _ = pm
@@ -393,6 +416,10 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         }
 
         // Now go through all the parents, including the root node
+        // 对中间节点（包括根）：
+        // 启动新子轨迹，通过 portal manager 获取左右子节点的哈希，
+        // 将左右子节点哈希转换回字节，再迭代计算父节点哈希，
+        // 将父节点的哈希存入 portal manager 中，并执行 dummy 占位操作
         for subcircuit_idx in self.leaves.len()..(num_subcircuits - 1) {
             pm.start_subtrace(ConstraintSystem::new_ref());
 
@@ -434,6 +461,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         }
 
         // Now do the padding node. This is only dummy ops
+        // 将 padding 子电路的 dummy 操作也加入进去。
         pm.start_subtrace(ConstraintSystem::new_ref());
         do_dummy_ops(&mut pm);
 
@@ -557,6 +585,7 @@ mod test {
     // Digests truncated to INNER_HASH_SIZE bytes and stored as portal wires. When we get the portal wire, we
     // have to unpack back into bytes. This test checks that the structure is preserved
     // their structure.
+    // 测试从 digest 到有限域变量再转换回 digest 的轮换是否保持数据一致。
     #[test]
     fn test_digest_fpvar_roundtrip() {
         let mut rng = test_rng();
@@ -611,6 +640,7 @@ mod test {
 
     // The other way of getting the portal trace is by just running the full circuit. This is very
     // slow in general
+    // 检查两种方式获取 portal trace 得到的结果是否一致：一种是基于 get_portal_subtraces，另一种通过“慢速”方法完整运行每个子电路的约束生成
     pub(crate) fn slow_get_portal_subtraces<F, P>(circ: &P) -> Vec<Vec<RomTranscriptEntry<F>>>
     where
         F: PrimeField,
