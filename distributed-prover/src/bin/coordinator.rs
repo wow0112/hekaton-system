@@ -29,7 +29,7 @@ struct Args {
 enum Command {
     /// Generates the Groth16 proving keys and aggregation key  for a test circuit consisting of
     /// `n` subcircuits. Places them in coord-state-dir
-    /// cargo run  --bin coordinator gen-keys --g16-pk-dir ./pk-nc=2-ns=4-np=4  --coord-state-dir ./co-nc=2-ns=4-np=4 --num-subcircuits 2 --num-sha2-iters 4 --num-portals 4
+    /// cargo run  --bin coordinator gen-keys --g16-pk-dir ./pk-nc=4-ns=4-np=4  --coord-state-dir ./co-nc=4-ns=4-np=4 --num-subcircuits 2 --num-sha2-iters 4 --num-portals 4
     GenKeys {
         /// Directory where the Groth16 proving keys will be stored
         #[clap(long, value_name = "DIR")]
@@ -54,7 +54,7 @@ enum Command {
 
     /// Begins stage0 for a random proof for a large circuit with the given parameters. This
     /// produces _worker request packages_ which are processed in parallel by worker nodes.
-    /// cargo run  --bin coordinator start-stage0 --req-dir ./req  --coord-state-dir ./co-nc=2-ns=4-np=4
+    /// cargo run  --bin coordinator start-stage0 --req-dir ./req  --coord-state-dir ./co-nc=4-ns=4-np=4
     StartStage0 {
         /// Directory where the coordinator's intermediate state is stored.
         #[clap(short, long, value_name = "DIR")]
@@ -66,7 +66,7 @@ enum Command {
     },
 
     /// Process the stage0 responses from workers and produce stage1 reqeusts
-    /// cargo run  --bin coordinator start-stage1 --req-dir ./req  --coord-state-dir ./co-nc=2-ns=4-np=4 --resp-dir ./resp-s0
+    /// cargo run  --bin coordinator start-stage1 --req-dir ./req  --coord-state-dir ./co-nc=4-ns=4-np=4 --resp-dir ./resp-s0
     StartStage1 {
         /// Directory where the coordinator's intermediate state is stored.
         #[clap(long, value_name = "DIR")]
@@ -82,7 +82,7 @@ enum Command {
     },
 
     /// Process the stage1 responses from workers and produce a final aggregate
-    /// cargo run  --bin coordinator end-proof --coord-state-dir ./co-nc=2-ns=4-np=4 --resp-dir ./resp-s1
+    /// cargo run  --bin coordinator end-proof --coord-state-dir ./co-nc=4-ns=4-np=4 --resp-dir ./resp-s1
     EndProof {
         /// Directory where the coordinator's intermediate state is stored.
         #[clap(short, long, value_name = "DIR")]
@@ -137,7 +137,6 @@ fn generate_g16_pks(
         circ.clone(),
         tree_params.clone(),
     );
-    // ****提问：G16ProvingKeyGenerator所传入的参数是整体circ，tree_params?还是subcircuit。为什么pk是merkle树的形式。是test circuit？如果有数个不同参数的子电路，是需要多个generator？
 
     // We don't actually have to generate every circuit proving key individually. Remember the test
     // circuit only really has 5 subcircuits: the first leaf, the root, every other leaf, every
@@ -323,7 +322,7 @@ fn begin_stage0(worker_req_dir: &PathBuf, coord_state_dir: &PathBuf) -> io::Resu
     )
     .unwrap();
     end_timer!(circ_params_timer);
-    // Num subcircuits is 2× num leaves
+
     let num_subcircuits = 2 * circ_params.num_leaves;
 
     let merkle_tree_timer =

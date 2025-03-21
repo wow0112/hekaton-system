@@ -5,12 +5,13 @@ use distributed_prover::{
     poseidon_util::{
         gen_merkle_params, PoseidonTreeConfig as TreeConfig, PoseidonTreeConfigVar as TreeConfigVar,
     },
-    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
     util::{cli_filenames::*, deserialize_from_path, serialize_to_path, serialize_to_paths},
     worker::{Stage0Response, Stage1Response},
     CircuitWithPortals,
+    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
 };
 use sha2::Sha256;
+use core::num;
 use std::time::Instant;
 use std::{io, path::PathBuf};
 
@@ -109,7 +110,7 @@ fn generate_g16_pks(
     // Make an empty circuit of the correct size
     let circ = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::new(&circ_params);
     let num_subcircuits = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::num_subcircuits(&circ);
-
+    println!("num_subcircuits:{:?}",num_subcircuits);
     let generator = G16ProvingKeyGenerator::<TreeConfig, TreeConfigVar, E, _>::new(
         circ.clone(),
         tree_params.clone(),
@@ -121,42 +122,34 @@ fn generate_g16_pks(
     let elapsed = first_start.elapsed();
     println!("first_pk Elapsed time: {:?}", elapsed);
 
-    let middle_start = Instant::now(); 
-    let middle_pk = generator.gen_pk(&mut rng, 1);
-    let elapsed = middle_start.elapsed();
-    println!("middle_pk Elapsed time: {:?}", elapsed);
-
-    let last_start = Instant::now(); 
-    let last_pk = generator.gen_pk(&mut rng, num_subcircuits-1);
-    let elapsed = last_start.elapsed();
-    println!("last_pk Elapsed time: {:?}", elapsed);
-
+    let second_start = Instant::now(); 
+    let second_pk = generator.gen_pk(&mut rng, num_subcircuits-1);
+    let elapsed = second_start.elapsed();
+    println!("secondt_pk Elapsed time: {:?}", elapsed);
 
     // Now save them
+    std::fs::remove_dir_all(g16_pk_dir).ok();
+    std::fs::create_dir_all(g16_pk_dir).unwrap();
 
-    let sort_range = 1..num_subcircuits-1;
-    // println!("Writing {num_subcircuits} sort proving keys");
-    // serialize_to_paths(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
-    // serialize_to_paths(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone(),).unwrap();
-    serialize_to_path(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(0)).unwrap();
-    serialize_to_path(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(0),).unwrap();
-    serialize_to_paths(&middle_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
-    serialize_to_paths(&middle_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone()).unwrap();
-    serialize_to_path(&last_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(num_subcircuits-1)).unwrap();
-    serialize_to_path(&last_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(num_subcircuits-1),).unwrap();
+    let sort_range = 0..num_subcircuits-1;
+    println!("{:?}sort_range:{:?}",sort_range.len(),sort_range);
+    println!("Writing 0..3 sort proving keys");
+    serialize_to_paths(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
+    serialize_to_paths(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone()).unwrap();
 
-
-
+    println!("Writing 3th proving key");
+    serialize_to_path(&second_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(num_subcircuits-1)).unwrap();
+    serialize_to_path(&second_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(num_subcircuits-1)).unwrap();
 
     // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
     // disk, but this might take a long long time.
     let pk_fetcher = |subcircuit_idx: usize| {
-        if subcircuit_idx ==0 {
+        if subcircuit_idx < num_subcircuits-1 {
             &first_pk
-        }else if subcircuit_idx ==num_subcircuits-1{
-            &last_pk
+        }else if subcircuit_idx == num_subcircuits-1 {
+            &second_pk
         }else{
-            &middle_pk
+            panic!("unexpected subcircuit index {subcircuit_idx}")
         }
     };
 
@@ -187,8 +180,7 @@ fn begin_stage0(worker_req_dir: &PathBuf, coord_state_dir: &PathBuf) -> io::Resu
     )
     .unwrap();
     end_timer!(circ_params_timer);
-
-    let num_subcircuits = circ_params.num_rows;
+    let num_subcircuits = circ_params.num_rows+1;
 
     let rand_circuit_timer =
         start_timer!(|| format!("Sampling a random Circuit with parapms {circ_params}"));
@@ -248,7 +240,7 @@ fn process_stage0_resps(coord_state_dir: &PathBuf, req_dir: &PathBuf, resp_dir: 
     )
     .unwrap();
 
-    let num_subcircuits = circ_params.num_rows;
+    let num_subcircuits = circ_params.num_rows+1;
 
     // Deserialize the coordinator's state and the aggregation key
     let coord_state = deserialize_from_path::<CoordinatorStage0State<E, ZkDbSqlCircuit<Fr>>>(
@@ -325,7 +317,7 @@ fn process_stage1_resps(coord_state_dir: &PathBuf, resp_dir: &PathBuf) {
         None,
     )
     .unwrap();
-    let num_subcircuits = circ_params.num_rows;
+    let num_subcircuits = circ_params.num_rows+1;
 
     // Deserialize the coordinator's final state, the aggregation key
     let final_agg_state = deserialize_from_path::<FinalAggState<E>>(
@@ -340,7 +332,7 @@ fn process_stage1_resps(coord_state_dir: &PathBuf, resp_dir: &PathBuf) {
 
     // Collect all the stage1 repsonses into a single vec. They're tiny (Groth16 proofs), so this
     // is fine.
-    let stage1_resps = (0..num_subcircuits)
+    let stage1_resps: Vec<Stage1Response<ark_ec::bls12::Bls12<ark_bls12_381::Config>>> = (0..num_subcircuits)
         .into_par_iter()
         .map(|subcircuit_idx| {
             deserialize_from_path::<Stage1Response<E>>(
@@ -351,7 +343,8 @@ fn process_stage1_resps(coord_state_dir: &PathBuf, resp_dir: &PathBuf) {
             .unwrap()
         })
         .collect::<Vec<_>>();
-
+    
+    
     // Compute the aggregate
     let start =
         start_timer!(|| format!("Aggregating proofs for circuit with params {circ_params}"));

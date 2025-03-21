@@ -5,10 +5,11 @@ use distributed_prover::{
     poseidon_util::{
         gen_merkle_params, PoseidonTreeConfig as TreeConfig, PoseidonTreeConfigVar as TreeConfigVar,
     },
-    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
+    tree_hash_circuit::{MerkleTreeCircuit, MerkleTreeCircuitParams},
     util::{cli_filenames::*, deserialize_from_path, serialize_to_path, serialize_to_paths},
     worker::{Stage0Response, Stage1Response},
     CircuitWithPortals,
+    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
 };
 use sha2::Sha256;
 use std::time::Instant;
@@ -121,42 +122,24 @@ fn generate_g16_pks(
     let elapsed = first_start.elapsed();
     println!("first_pk Elapsed time: {:?}", elapsed);
 
-    let middle_start = Instant::now(); 
-    let middle_pk = generator.gen_pk(&mut rng, 1);
-    let elapsed = middle_start.elapsed();
-    println!("middle_pk Elapsed time: {:?}", elapsed);
-
-    let last_start = Instant::now(); 
-    let last_pk = generator.gen_pk(&mut rng, num_subcircuits-1);
-    let elapsed = last_start.elapsed();
-    println!("last_pk Elapsed time: {:?}", elapsed);
-
 
     // Now save them
+    std::fs::remove_dir_all(g16_pk_dir).ok();
+    std::fs::create_dir_all(g16_pk_dir).unwrap();
 
-    let sort_range = 1..num_subcircuits-1;
-    // println!("Writing {num_subcircuits} sort proving keys");
-    // serialize_to_paths(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
-    // serialize_to_paths(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone(),).unwrap();
-    serialize_to_path(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(0)).unwrap();
-    serialize_to_path(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(0),).unwrap();
-    serialize_to_paths(&middle_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
-    serialize_to_paths(&middle_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone()).unwrap();
-    serialize_to_path(&last_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(num_subcircuits-1)).unwrap();
-    serialize_to_path(&last_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(num_subcircuits-1),).unwrap();
-
-
+    let sort_range = 0..num_subcircuits;
+    println!("Writing {num_subcircuits} sort proving keys");
+    serialize_to_paths(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
+    serialize_to_paths(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone(),).unwrap();
 
 
     // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
     // disk, but this might take a long long time.
     let pk_fetcher = |subcircuit_idx: usize| {
-        if subcircuit_idx ==0 {
+        if subcircuit_idx < num_subcircuits {
             &first_pk
-        }else if subcircuit_idx ==num_subcircuits-1{
-            &last_pk
-        }else{
-            &middle_pk
+        }else {
+            panic!("unexpected subcircuit index {subcircuit_idx}")
         }
     };
 
@@ -187,7 +170,6 @@ fn begin_stage0(worker_req_dir: &PathBuf, coord_state_dir: &PathBuf) -> io::Resu
     )
     .unwrap();
     end_timer!(circ_params_timer);
-
     let num_subcircuits = circ_params.num_rows;
 
     let rand_circuit_timer =
@@ -247,7 +229,7 @@ fn process_stage0_resps(coord_state_dir: &PathBuf, req_dir: &PathBuf, resp_dir: 
         None,
     )
     .unwrap();
-
+    // Num subcircuits is 2× num leaves
     let num_subcircuits = circ_params.num_rows;
 
     // Deserialize the coordinator's state and the aggregation key

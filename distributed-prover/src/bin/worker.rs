@@ -21,7 +21,7 @@ struct Args {
 #[derive(Subcommand)]
 enum Command {
     /// Processes the stage0 requests issued by the coordinator
-    /// cargo run  --bin worker process-stage0-request --g16-pk-dir ./pk-nc=2-ns=4-np=4 --req-dir ./req  --out-dir ./resp-s0 --subcircuit-index 0
+    /// cargo run  --bin worker process-stage0-request --g16-pk-dir ./pk-nc=4-ns=4-np=4 --req-dir ./req  --out-dir ./resp-s0 --subcircuit-index 0
     ProcessStage0Request {
         /// Directory where the Groth16 proving keys are stored
         #[clap(short, long, value_name = "DIR")]
@@ -41,7 +41,7 @@ enum Command {
     },
 
     /// Process the stage0 responses from workers and produce stage1 reqeusts
-    /// cargo run  --bin worker process-stage1-request --g16-pk-dir ./pk-nc=2-ns=4-np=4 --req-dir ./req  --resp-dir ./resp-s0 --out-dir ./resp-s1 --subcircuit-index 0
+    /// cargo run  --bin worker process-stage1-request --g16-pk-dir ./pk-nc=4-ns=4-np=4 --req-dir ./req  --resp-dir ./resp-s0 --out-dir ./resp-s1 --subcircuit-index 0
     ProcessStage1Request {
         /// Directory where the Groth16 proving keys are stored
         #[clap(long, value_name = "DIR")]

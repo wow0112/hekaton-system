@@ -218,7 +218,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         } else if is_root {
             self.root_hash.serialize_uncompressed(&mut out_buf).unwrap();
         }
-
+        println!("######outbut:{:?}",out_buf);
         out_buf
     }
 
@@ -251,6 +251,8 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
         } else if is_root {
             self.root_hash = InnerHash::deserialize_uncompressed_unchecked(bytes).unwrap();
         }
+        println!("$$$$$leaf:{:?}",self.leaves);
+        println!("%%%%%root:{:?}",self.root_hash);
     }
 
     fn generate_constraints<P: PortalManager<F>>(
@@ -328,7 +330,6 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
 
         // Do some placeholder memory operations
         // First, set the portal value. Only need to do this once.
-        // 以下为 portal 的占位操作（dummy memory operations）
         if subcircuit_idx == 0 {
             let _ = pm.set(
                 "placeholder".to_string(),

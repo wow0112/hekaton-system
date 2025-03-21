@@ -1,13 +1,12 @@
 use distributed_prover::{
     coordinator::{Stage0Request, Stage1Request},
     poseidon_util::{gen_merkle_params, PoseidonTreeConfigVar as TreeConfigVar},
-    tree_hash_circuit::MerkleTreeCircuit,
     util::{cli_filenames::*, deserialize_from_path, serialize_to_path, G16ProvingKey},
     worker::Stage0Response,
-    test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
+    test_circuit::ZkDbSqlCircuit,
 };
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 
 use ark_bls12_381::{Bls12_381 as E, Fr};
 use ark_std::{end_timer, start_timer};
@@ -84,6 +83,7 @@ fn process_stage0_request(
     )
     .unwrap();
     end_timer!(start);
+    
     let start = start_timer!(|| "Deserializing req");
     let stage0_req = deserialize_from_path::<Stage0Request<Fr>>(
         req_dir,
@@ -187,8 +187,12 @@ fn main() {
             req_dir,
             out_dir,
             subcircuit_index,
-        } => process_stage0_request(subcircuit_index, &g16_pk_dir, &req_dir, &out_dir),
-
+        } => {
+            let start = Instant::now();
+            process_stage0_request(subcircuit_index, &g16_pk_dir, &req_dir, &out_dir);
+            let elapsed = start.elapsed();
+            println!("!!!ProcessStage0Request Elapsed time: {:?}", elapsed);
+        },
         Command::ProcessStage1Request {
             g16_pk_dir,
             req_dir,

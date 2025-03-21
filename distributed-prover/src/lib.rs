@@ -17,6 +17,7 @@ pub mod util;
 pub mod worker;
 mod tpch;
 pub mod test_circuit;
+pub mod single_tuple_filter_circuit;
 
 use crate::portal_manager::SetupRamPortalManager;
 use portal_manager::{PortalManager, ProverPortalManager};
