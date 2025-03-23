@@ -122,11 +122,19 @@ fn generate_g16_pks(
         serialize_to_path(&pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(i),).unwrap();
     }
 
-    let pk_fetcher = |subcircuit_idx: usize| {deserialize_from_path::<G16ProvingKey<E>>(
-        g16_pk_dir,
-        G16_PK_FILENAME_PREFIX,
-        Some(subcircuit_idx),
-    ).unwrap()};
+    let pks: Vec<G16ProvingKey<E>> = (0..num_subcircuits)
+        .map(|subcircuit_idx| {
+            deserialize_from_path::<G16ProvingKey<E>>(
+                g16_pk_dir,
+                G16_PK_FILENAME_PREFIX,
+                Some(subcircuit_idx),
+            ).unwrap()
+        })
+        .collect();
+    
+    let pk_fetcher = |subcircuit_idx: usize| {
+        &pks[subcircuit_idx]
+    };
 
     // // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
     // // disk, but this might take a long long time.
