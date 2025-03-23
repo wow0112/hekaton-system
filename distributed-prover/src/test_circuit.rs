@@ -112,10 +112,8 @@ impl<F: PrimeField> CircuitWithPortals<F> for ZkDbSqlCircuit<F> {
             let left_len = segment_size;
             let right_len = right_end - right_start;
             
-            F::from(left_len as u64).serialize_uncompressed(&mut out_buf).unwrap();
-            F::from(right_len as u64).serialize_uncompressed(&mut out_buf).unwrap();
             
-            // 序列化左段排序键和索引
+            // 序列化左段tabledata和索引
             for i in 0..left_len {
                 if left_start + i < self.params.num_rows {
                     let idx = self.sorted_indices[left_start + i];
@@ -126,7 +124,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for ZkDbSqlCircuit<F> {
                 }
             }
             
-            // 序列化右段排序键和索引
+            // 序列化右段tabledata和索引
             for i in 0..right_len {
                 if right_start + i < self.params.num_rows {
                     let idx = self.sorted_indices[right_start + i];
@@ -152,16 +150,15 @@ impl<F: PrimeField> CircuitWithPortals<F> for ZkDbSqlCircuit<F> {
         let num_segments = (self.params.num_rows + segment_size - 1) / segment_size;
         let num_pairs = (num_segments) / 2;
         
-        // 对于每一对要归并的段，反序列化排序后的索引
         for pair_idx in 0..num_pairs {
-            let output_start = pair_idx * 2 * segment_size;
+            let left_start = pair_idx * 2 * segment_size;
+            let right_start = left_start + segment_size;
+            let right_end = std::cmp::min(right_start + segment_size, self.params.num_rows);
+            let output_start = left_start;
             
-            // 反序列化左段长度和右段长度
-            let left_len = F::deserialize_uncompressed_unchecked(&bytes[offset..(offset + field_size)]).unwrap().into() as usize;
-            offset += field_size;
-            
-            let right_len = F::deserialize_uncompressed_unchecked(&bytes[offset..(offset + field_size)]).unwrap().into()as usize;
-            offset += field_size;
+            // 直接计算左段长度和右段长度，不再从序列化数据中读取
+            let left_len = segment_size;
+            let right_len = right_end - right_start;
             
             // 跳过左段和右段的排序键和索引
             let entries_to_skip = (left_len + right_len) * 2;
@@ -206,16 +203,6 @@ impl<F: PrimeField> CircuitWithPortals<F> for ZkDbSqlCircuit<F> {
             let right_end = std::cmp::min(right_start + segment_size, self.params.num_rows);
             let output_start = left_start;
             
-            // 创建左段和右段的长度变量
-            let left_len: FpVar<F> = FpVar::new_witness(
-                ns!(cs, "left_len_{pair_idx}"), 
-                || Ok(F::from(segment_size as u64))
-            )?;
-            
-            let right_len: FpVar<F> = FpVar::new_witness(
-                ns!(cs, "right_len_{pair_idx}"), 
-                || Ok(F::from((right_end - right_start) as u64))
-            )?;
             
             // 创建存储左段和右段的数组
             let mut left_keys = Vec::with_capacity(segment_size);
