@@ -6,7 +6,7 @@ use distributed_prover::{
         gen_merkle_params, PoseidonTreeConfig as TreeConfig, PoseidonTreeConfigVar as TreeConfigVar,
     },
     test_circuit::{ZkDbSqlCircuit, ZkDbSqlCircuitParams},
-    util::{cli_filenames::*, deserialize_from_path, serialize_to_path, serialize_to_paths},
+    util::{cli_filenames::*, deserialize_from_path, serialize_to_path, serialize_to_paths,G16ProvingKey},
     worker::{Stage0Response, Stage1Response},
     CircuitWithPortals,
 };
@@ -122,7 +122,11 @@ fn generate_g16_pks(
         serialize_to_path(&pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(i),).unwrap();
     }
 
-    let pk_fetcher = |subcircuit_idx: usize| {subcircuit_idx};
+    let pk_fetcher = |subcircuit_idx: usize| {deserialize_from_path::<G16ProvingKey<E>>(
+        g16_pk_dir,
+        G16_PK_FILENAME_PREFIX,
+        Some(subcircuit_idx),
+    ).unwrap()};
 
     // // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
     // // disk, but this might take a long long time.
