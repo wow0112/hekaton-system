@@ -20,7 +20,7 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Processes the stage0 requests issued by the coordinator
+    /// Processes the stage0 requests issued by the coordinators
     /// cargo run --bin test-worker process-stage0-request --g16-pk-dir ./pk-test --req-dir ./req  --out-dir ./resp-s0 --subcircuit-index 0
     ProcessStage0Request {
         /// Directory where the Groth16 proving keys are stored
