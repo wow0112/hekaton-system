@@ -116,50 +116,25 @@ fn generate_g16_pks(
         tree_params.clone(),
     );
 
+    for i in 0..num_subcircuits {
+        let pk = generator.gen_pk(&mut rng, i);
+        serialize_to_path(&pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(i)).unwrap();
+        serialize_to_path(&pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(i),).unwrap();
+    }
 
-    let first_start = Instant::now(); 
-    let first_pk = generator.gen_pk(&mut rng, 0);
-    let elapsed = first_start.elapsed();
-    println!("first_pk Elapsed time: {:?}", elapsed);
+    let pk_fetcher = |subcircuit_idx: usize| {subcircuit_idx};
 
-    let middle_start = Instant::now(); 
-    let middle_pk = generator.gen_pk(&mut rng, 1);
-    let elapsed = middle_start.elapsed();
-    println!("middle_pk Elapsed time: {:?}", elapsed);
-
-    let last_start = Instant::now(); 
-    let last_pk = generator.gen_pk(&mut rng, num_subcircuits-1);
-    let elapsed = last_start.elapsed();
-    println!("last_pk Elapsed time: {:?}", elapsed);
-
-
-    // Now save them
-
-    let sort_range = 1..num_subcircuits-1;
-    // println!("Writing {num_subcircuits} sort proving keys");
-    // serialize_to_paths(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
-    // serialize_to_paths(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone(),).unwrap();
-    serialize_to_path(&first_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(0)).unwrap();
-    serialize_to_path(&first_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(0),).unwrap();
-    serialize_to_paths(&middle_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, sort_range.clone()).unwrap();
-    serialize_to_paths(&middle_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,sort_range.clone()).unwrap();
-    serialize_to_path(&last_pk, g16_pk_dir, G16_PK_FILENAME_PREFIX, Some(num_subcircuits-1)).unwrap();
-    serialize_to_path(&last_pk.ck,g16_pk_dir,G16_CK_FILENAME_PREFIX,Some(num_subcircuits-1),).unwrap();
-
-
-
-
-    // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
-    // disk, but this might take a long long time.
-    let pk_fetcher = |subcircuit_idx: usize| {
-        if subcircuit_idx ==0 {
-            &first_pk
-        }else if subcircuit_idx ==num_subcircuits-1{
-            &last_pk
-        }else{
-            &middle_pk
-        }
-    };
+    // // To generate the aggregation key, we need an efficient G16 pk fetcher. Normally this hits
+    // // disk, but this might take a long long time.
+    // let pk_fetcher = |subcircuit_idx: usize| {
+    //     if subcircuit_idx ==0 {
+    //         &first_pk
+    //     }else if subcircuit_idx ==num_subcircuits-1{
+    //         &last_pk
+    //     }else{
+    //         &middle_pk
+    //     }
+    // };
 
     // Construct the aggregator commitment key
     let agg_start = Instant::now();
