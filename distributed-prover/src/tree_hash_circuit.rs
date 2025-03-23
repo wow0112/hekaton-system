@@ -303,7 +303,7 @@ impl<F: PrimeField> CircuitWithPortals<F> for MerkleTreeCircuit {
                 // 1. 从 portal manager 中获取左右孩子节点的哈希
                 // 2. 将左右子节点的有限域变量转换成字节序列，并连接起来
                 // 3. 计算父节点的 iterated_sha256，再存入 portal manager
-                // This is a non-root parent node. Get the left and right hashes
+                // This is a non-root parent node. Get the left and right hashes  
                 let left = left_child(node_idx);
                 let right = right_child(node_idx);
                 let left_child_hash = pm.get(&format!("node {left} hash"))?;

@@ -109,7 +109,7 @@ fn generate_g16_pks(
     // Make an empty circuit of the correct size
     let circ = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::new(&circ_params);
     let num_subcircuits = <ZkDbSqlCircuit<Fr> as CircuitWithPortals<Fr>>::num_subcircuits(&circ);
-
+    println!("Making a test circuit with {num_subcircuits} subcircuits");
     let generator = G16ProvingKeyGenerator::<TreeConfig, TreeConfigVar, E, _>::new(
         circ.clone(),
         tree_params.clone(),
@@ -188,7 +188,7 @@ fn begin_stage0(worker_req_dir: &PathBuf, coord_state_dir: &PathBuf) -> io::Resu
     .unwrap();
     end_timer!(circ_params_timer);
 
-    let num_subcircuits = circ_params.num_rows;
+    let num_subcircuits = (circ_params.num_rows+63)/64;
 
     let rand_circuit_timer =
         start_timer!(|| format!("Sampling a random Circuit with parapms {circ_params}"));
@@ -248,7 +248,7 @@ fn process_stage0_resps(coord_state_dir: &PathBuf, req_dir: &PathBuf, resp_dir: 
     )
     .unwrap();
 
-    let num_subcircuits = circ_params.num_rows;
+    let num_subcircuits = (circ_params.num_rows+63)/64;
 
     // Deserialize the coordinator's state and the aggregation key
     let coord_state = deserialize_from_path::<CoordinatorStage0State<E, ZkDbSqlCircuit<Fr>>>(
@@ -325,7 +325,7 @@ fn process_stage1_resps(coord_state_dir: &PathBuf, resp_dir: &PathBuf) {
         None,
     )
     .unwrap();
-    let num_subcircuits = circ_params.num_rows;
+    let num_subcircuits = (circ_params.num_rows+63)/64;
 
     // Deserialize the coordinator's final state, the aggregation key
     let final_agg_state = deserialize_from_path::<FinalAggState<E>>(
@@ -353,10 +353,13 @@ fn process_stage1_resps(coord_state_dir: &PathBuf, resp_dir: &PathBuf) {
         .collect::<Vec<_>>();
 
     // Compute the aggregate
+    let start_instant = Instant::now();
     let start =
         start_timer!(|| format!("Aggregating proofs for circuit with params {circ_params}"));
     let agg_proof = final_agg_state.gen_agg_proof(&agg_ck, &stage1_resps);
     end_timer!(start);
+    let elapsed = start_instant.elapsed();
+    println!("Aggregating proofs elapsed time: {:?}", elapsed);
     // Save the proof
     serialize_to_path(&agg_proof, coord_state_dir, FINAL_PROOF_PREFIX, None).unwrap();
 }
@@ -415,7 +418,10 @@ fn main() {
             coord_state_dir,
             resp_dir,
         } => {
+            let start = Instant::now();
             process_stage1_resps(&coord_state_dir, &resp_dir);
+            let elapsed = start.elapsed();
+            println!("!!!End Proof Elapsed time: {:?}", elapsed);
         },
     }
 

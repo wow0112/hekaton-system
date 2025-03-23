@@ -1,0 +1,30 @@
+分布式证明系统计时结果 (NUM_ROWS=4096)
+开始时间: Sat 22 Mar 2025 08:58:21 AM UTC
+----------------------------------------
+正在运行 gen-keys...
+gen-keys 完成，耗时 35 秒
+----------------------------------------
+正在运行 start-stage0...
+start-stage0 完成，耗时 0 秒
+----------------------------------------
+正在运行 process-stage0-request...
+所有 process-stage0-request 完成，总耗时 2 秒
+----------------------------------------
+正在运行 start-stage1...
+start-stage1 完成，耗时 0 秒
+----------------------------------------
+正在运行 process-stage1-request...
+所有 process-stage1-request 完成，总耗时 167 秒
+----------------------------------------
+正在运行 end-proof...
+end-proof 完成，耗时 50 秒
+----------------------------------------
+总结:
+gen-keys: 35 秒
+start-stage0: 0 秒
+所有 process-stage0-request: 2 秒
+start-stage1: 0 秒
+所有 process-stage1-request: 167 秒
+end-proof: 50 秒
+总执行时间: 254 秒
+完成时间: Sat 22 Mar 2025 09:02:35 AM UTC
