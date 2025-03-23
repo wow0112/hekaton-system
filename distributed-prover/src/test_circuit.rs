@@ -164,13 +164,14 @@ impl<F: PrimeField> CircuitWithPortals<F> for ZkDbSqlCircuit<F> {
             let entries_to_skip = (left_len + right_len) * 2;
             offset += entries_to_skip * field_size;
             
-            let field_size = usize::.uncompressed_size();
+
+            let usize_size = std::mem::size_of::<usize>();
             // 反序列化归并后的索引
             let merged_len = left_len + right_len;
             for i in 0..merged_len {
                 if output_start + i < self.params.num_rows {
-                    let sorted_idx = usize::deserialize_uncompressed_unchecked(&bytes[offset..(offset + field_size)]).unwrap();
-                    offset += field_size;
+                    let sorted_idx = usize::deserialize_uncompressed_unchecked(&bytes[offset..(offset + usize_size)]).unwrap();
+                    offset += usize_size;
                     
                     self.sorted_indices[output_start + i] = sorted_idx;
                 }

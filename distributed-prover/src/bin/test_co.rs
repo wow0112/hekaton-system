@@ -93,6 +93,7 @@ fn gen_test_circuit_params(
 
     ZkDbSqlCircuitParams {
         num_rows: num_rows,
+        sort_column_idx: 0,
     }
 }
 
